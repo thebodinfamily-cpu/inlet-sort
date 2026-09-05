@@ -1,11 +1,12 @@
 # inlet-sort
 
+[![CI](https://github.com/thebodinfamily-cpu/inlet-sort/actions/workflows/ci.yml/badge.svg)](https://github.com/thebodinfamily-cpu/inlet-sort/actions/workflows/ci.yml)
+
 Inlet Sort is a **sequential samplesort**: items flow through a classifying inlet
 that routes each value into one of several ordered chambers, then each chamber
 is sorted and drained left to right.
 
-This repository started as an empty Cloud Agent clone target. This is the
-project's first working implementation: a Python library, CLI, tests, and CI.
+Python library, CLI, tests, and CI. Stable, with a `sorted()`-compatible API.
 
 ## How it works
 
