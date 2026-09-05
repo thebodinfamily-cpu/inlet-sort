@@ -62,20 +62,20 @@ def inlet_sort_inplace(
     decorated: list[tuple[K, T]] = [(key(item), item) for item in values]
     key_less = _gt if reverse else _lt
 
-    def less(left: tuple[K, T], right: tuple[K, T]) -> bool:
+    def decorated_less(left: tuple[K, T], right: tuple[K, T]) -> bool:
         return key_less(left[0], right[0])
 
-    _sort_range(decorated, 0, n, less, depth_limit=_max_depth(n))
+    _sort_range(decorated, 0, n, decorated_less, depth_limit=_max_depth(n))
     for index, (_, item) in enumerate(decorated):
         values[index] = item
 
 
 def _lt(left: object, right: object) -> bool:
-    return left < right  # type: ignore[operator]
+    return bool(left < right)  # type: ignore[operator]
 
 
 def _gt(left: object, right: object) -> bool:
-    return left > right  # type: ignore[operator]
+    return bool(left > right)  # type: ignore[operator]
 
 
 def _is_nondecreasing(
@@ -84,10 +84,7 @@ def _is_nondecreasing(
     hi: int,
     less: Callable[[T, T], bool],
 ) -> bool:
-    for i in range(lo + 1, hi):
-        if less(values[i], values[i - 1]):
-            return False
-    return True
+    return all(not less(values[i], values[i - 1]) for i in range(lo + 1, hi))
 
 
 def _max_depth(n: int) -> int:

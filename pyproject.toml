@@ -25,7 +25,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
 
 [project.scripts]
 inlet-sort = "inlet_sort.cli:main"
@@ -44,3 +44,19 @@ inlet_sort = ["py.typed"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["src", "tests", "benchmarks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src"]
+strict = true

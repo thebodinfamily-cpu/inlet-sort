@@ -86,6 +86,9 @@ python -m inlet_sort -n -r data.txt
 ```bash
 python -m pip install -e ".[dev]"
 pytest
+ruff check .
+ruff format --check .
+mypy
 python benchmarks/bench.py
 ```
 
