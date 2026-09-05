@@ -1,4 +1,4 @@
 {
   "name": "inlet-sort",
-  "install": "python -m pip install --upgrade pip && python -m pip install -e \".[dev]\""
+  "install": "python3 -m pip install --break-system-packages -e \".[dev]\""
 }
