@@ -78,6 +78,18 @@ def _gt(left: object, right: object) -> bool:
     return left > right  # type: ignore[operator]
 
 
+def _is_nondecreasing(
+    values: MutableSequence[T],
+    lo: int,
+    hi: int,
+    less: Callable[[T, T], bool],
+) -> bool:
+    for i in range(lo + 1, hi):
+        if less(values[i], values[i - 1]):
+            return False
+    return True
+
+
 def _max_depth(n: int) -> int:
     depth = 0
     while n > 1:
@@ -98,6 +110,8 @@ def _sort_range(
         return
     if n <= _BASE_CASE:
         _insertion_sort(values, lo, hi, less)
+        return
+    if _is_nondecreasing(values, lo, hi, less):
         return
     if depth_limit <= 0:
         _stable_fallback(values, lo, hi, less)

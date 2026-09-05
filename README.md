@@ -25,6 +25,7 @@ project's first working implementation: a Python library, CLI, tests, and CI.
 ```
 
 1. **Base case.** Ranges of 32 items or fewer are insertion-sorted (stable).
+   Larger ranges that are already in order return immediately.
 2. **Sample.** Evenly spaced items are sorted and used as splitters (quantiles).
 3. **Scatter.** Each item is binary-searched into an inlet. Equal keys keep
    input order because inlets are appended left to right.
