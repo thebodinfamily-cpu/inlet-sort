@@ -39,11 +39,13 @@ Python library, CLI, tests, and CI. Stable, with a `sorted()`-compatible API.
 Expected time is **O(n log n)** comparisons. Extra memory is **O(n)** for the
 inlet buffers. The algorithm is **stable**.
 
-Python's built-in `sorted()` is a highly tuned Timsort written in C, so it will
-usually win on wall-clock time. Inlet Sort is here as a clear, tested samplesort
-you can read, teach, and port to a lower-level implementation. An optional C
-port of the inlet classifier ships in `src/inlet_sort/_inletsort.c` and closes
-much of the gap with the pure-Python version while staying stable.
+Python's built-in `sorted()` is a highly tuned Timsort written in C. An optional
+C port of the inlet classifier ships in `src/inlet_sort/_inletsort.c`, and for
+lists of plain `int` or `float` it uses a stable radix fast path that **matches
+or beats `sorted()`** (Timsort still wins on already-sorted input, where its run
+detection is O(n)). For arbitrary objects the native port goes through the
+generic comparison sort and stays behind Timsort, but well ahead of the
+pure-Python version.
 
 ## Install
 
@@ -109,9 +111,10 @@ integers. Property-based tests (`hypothesis`) fuzz the pure-Python sort against
 `sorted()`, and a parity suite checks that the native extension agrees with both
 the pure-Python implementation and `sorted()` across many distributions.
 
-The C port of the inlet classifier now ships (`src/inlet_sort/_inletsort.c`) and
-is several times faster than the pure-Python version, though still behind the
-built-in Timsort. Natural next steps for closing that gap further are a
-type-specialized fast path (e.g. dedicated integer/float sorts that skip the
-generic `PyObject` comparison protocol) or a SIMD/Rust implementation of the
-classifier.
+The C port of the inlet classifier ships (`src/inlet_sort/_inletsort.c`). It
+includes a type-specialized, stable radix fast path for all-`int` and all-`float`
+lists that skips the generic `PyObject` comparison protocol; on those inputs it
+matches or beats the built-in Timsort. Mixed, large-integer, or NaN inputs fall
+back to the generic comparison samplesort, which trails Timsort but is several
+times faster than the pure-Python version. A SIMD or Rust implementation of the
+classifier is a natural next step for the arbitrary-object path.
