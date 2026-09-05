@@ -2,6 +2,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Compiled extensions
+*.so
+*.pyd
+*.o
 *.egg-info/
 .eggs/
 dist/

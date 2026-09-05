@@ -38,7 +38,7 @@ Repository = "https://github.com/thebodinfamily-cpu/inlet-sort"
 where = ["src"]
 
 [tool.setuptools.package-data]
-inlet_sort = ["py.typed"]
+inlet_sort = ["py.typed", "*.pyi"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

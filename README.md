@@ -41,7 +41,9 @@ inlet buffers. The algorithm is **stable**.
 
 Python's built-in `sorted()` is a highly tuned Timsort written in C, so it will
 usually win on wall-clock time. Inlet Sort is here as a clear, tested samplesort
-you can read, teach, and later port to a lower-level CPU implementation.
+you can read, teach, and port to a lower-level implementation. An optional C
+port of the inlet classifier ships in `src/inlet_sort/_inletsort.c` and closes
+much of the gap with the pure-Python version while staying stable.
 
 ## Install
 
@@ -50,6 +52,13 @@ python -m pip install -e ".[dev]"
 ```
 
 Requires Python 3.10+.
+
+If a C compiler and the Python development headers are available, an optional
+native extension (`inlet_sort._inletsort`) is built automatically and used
+transparently. It is a faithful, stable port of the same inlet classifier and
+runs several times faster than the pure-Python code. The extension is marked
+optional: when it cannot be built, installation still succeeds and the
+pure-Python implementation is used instead, with identical results.
 
 ## Library
 
