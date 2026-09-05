@@ -105,5 +105,13 @@ python benchmarks/bench.py
 
 Alpha. The sort is covered against `sorted()` on empty/tiny inputs, duplicates,
 stability, strings, floats, skewed distributions, and a few thousand random
-integers. A C or Rust port of the same inlet classifier is the natural next step
-if you want Timsort-competitive CPU performance.
+integers. Property-based tests (`hypothesis`) fuzz the pure-Python sort against
+`sorted()`, and a parity suite checks that the native extension agrees with both
+the pure-Python implementation and `sorted()` across many distributions.
+
+The C port of the inlet classifier now ships (`src/inlet_sort/_inletsort.c`) and
+is several times faster than the pure-Python version, though still behind the
+built-in Timsort. Natural next steps for closing that gap further are a
+type-specialized fast path (e.g. dedicated integer/float sorts that skip the
+generic `PyObject` comparison protocol) or a SIMD/Rust implementation of the
+classifier.
