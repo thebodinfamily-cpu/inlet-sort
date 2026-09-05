@@ -9,7 +9,18 @@ larger ones are sorted recursively. Equal keys stay in input order.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, MutableSequence
-from typing import TypeVar
+from typing import Any, Protocol, TypeVar
+
+
+class _NativeSorter(Protocol):
+    def __call__(self, values: list[Any], reverse: bool = ..., /) -> None: ...
+
+
+_native_sort: _NativeSorter | None
+try:
+    from ._inletsort import sort as _native_sort
+except ImportError:  # pragma: no cover - exercised only without the C build
+    _native_sort = None
 
 T = TypeVar("T")
 K = TypeVar("K")
@@ -55,6 +66,9 @@ def inlet_sort_inplace(
         return
 
     if key is None:
+        if _native_sort is not None and isinstance(values, list):
+            _native_sort(values, reverse)
+            return
         less = _gt if reverse else _lt
         _sort_range(values, 0, n, less, depth_limit=_max_depth(n))
         return
