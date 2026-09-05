@@ -14,6 +14,10 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+#include <math.h>
+#include <stdint.h>
+#include <string.h>
+
 #define BASE_CASE 32
 #define MAX_INLETS 64
 #define OVERSAMPLE 4
@@ -342,6 +346,146 @@ sort_range(Ctx *ctx, PyObject **a, Py_ssize_t lo, Py_ssize_t hi,
     }
 }
 
+/* --- Type-specialized fast paths -----------------------------------------
+ *
+ * When every element is an exact `int` (fitting in 64 bits) or an exact
+ * `float` (not NaN), the values are mapped to order-preserving unsigned 64-bit
+ * keys and sorted with a stable LSD radix sort, carrying the objects along.
+ * This skips PyObject_RichCompareBool entirely. For reverse order the key is
+ * bitwise-inverted, which keeps the sort ascending in key space while placing
+ * larger values first and preserving input order among equal values -- exactly
+ * matching sorted(reverse=True). Any element that fails the type/overflow/NaN
+ * guard makes the caller fall back to the generic comparison samplesort.
+ */
+
+/* Stable LSD radix sort of *obj* by unsigned 64-bit *key* (8 passes of 8 bits).
+ * Returns 0 on success, -1 on allocation failure. On success the sorted
+ * objects are left in *obj* (8 passes is even, so buffers end swapped back). */
+static int
+radix_sort_u64(uint64_t *key, PyObject **obj, Py_ssize_t n)
+{
+    uint64_t *key_alt = PyMem_Malloc((size_t)n * sizeof(uint64_t));
+    PyObject **obj_alt = PyMem_Malloc((size_t)n * sizeof(PyObject *));
+    if (key_alt == NULL || obj_alt == NULL) {
+        PyMem_Free(key_alt);
+        PyMem_Free(obj_alt);
+        return -1;
+    }
+
+    uint64_t *ks = key;
+    uint64_t *kd = key_alt;
+    PyObject **os = obj;
+    PyObject **od = obj_alt;
+
+    for (int shift = 0; shift < 64; shift += 8) {
+        Py_ssize_t count[256] = {0};
+        for (Py_ssize_t i = 0; i < n; i++) {
+            count[(ks[i] >> shift) & 0xff]++;
+        }
+        Py_ssize_t offset = 0;
+        for (int b = 0; b < 256; b++) {
+            Py_ssize_t c = count[b];
+            count[b] = offset;
+            offset += c;
+        }
+        for (Py_ssize_t i = 0; i < n; i++) {
+            Py_ssize_t pos = count[(ks[i] >> shift) & 0xff]++;
+            kd[pos] = ks[i];
+            od[pos] = os[i];
+        }
+        uint64_t *tk = ks;
+        ks = kd;
+        kd = tk;
+        PyObject **to = os;
+        os = od;
+        od = to;
+    }
+
+    PyMem_Free(key_alt);
+    PyMem_Free(obj_alt);
+    return 0;
+}
+
+/* Returns 1 if handled (base reordered), 0 if not all exact int64, -1 on error. */
+static int
+try_sort_int64(PyObject **base, Py_ssize_t n, int reverse)
+{
+    uint64_t *key = PyMem_Malloc((size_t)n * sizeof(uint64_t));
+    if (key == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject *item = base[i];
+        if (!PyLong_CheckExact(item)) {
+            PyMem_Free(key);
+            return 0;
+        }
+        int overflow = 0;
+        long long value = PyLong_AsLongLongAndOverflow(item, &overflow);
+        if (overflow != 0) {
+            PyMem_Free(key);
+            return 0;
+        }
+        if (value == -1 && PyErr_Occurred()) {
+            PyMem_Free(key);
+            return -1;
+        }
+        /* Flip the sign bit so signed order becomes unsigned order. */
+        uint64_t mapped = (uint64_t)value ^ 0x8000000000000000ULL;
+        key[i] = reverse ? ~mapped : mapped;
+    }
+    int rc = radix_sort_u64(key, base, n);
+    PyMem_Free(key);
+    if (rc < 0) {
+        PyErr_NoMemory();
+        return -1;
+    }
+    return 1;
+}
+
+/* Returns 1 if handled (base reordered), 0 if not all exact non-NaN float,
+ * -1 on error. */
+static int
+try_sort_float64(PyObject **base, Py_ssize_t n, int reverse)
+{
+    uint64_t *key = PyMem_Malloc((size_t)n * sizeof(uint64_t));
+    if (key == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject *item = base[i];
+        if (!PyFloat_CheckExact(item)) {
+            PyMem_Free(key);
+            return 0;
+        }
+        double value = PyFloat_AS_DOUBLE(item);
+        if (isnan(value)) {
+            PyMem_Free(key);
+            return 0;
+        }
+        if (value == 0.0) {
+            /* Canonicalize -0.0 to +0.0 so equal zeros stay in input order. */
+            value = 0.0;
+        }
+        uint64_t bits;
+        memcpy(&bits, &value, sizeof(bits));
+        /* IEEE-754 to sortable unsigned: flip all bits if negative, else set
+         * the sign bit. */
+        bits = (bits & 0x8000000000000000ULL) ? ~bits
+                                              : (bits | 0x8000000000000000ULL);
+        key[i] = reverse ? ~bits : bits;
+    }
+    int rc = radix_sort_u64(key, base, n);
+    PyMem_Free(key);
+    if (rc < 0) {
+        PyErr_NoMemory();
+        return -1;
+    }
+    return 1;
+}
+
 static int
 max_depth(Py_ssize_t n)
 {
@@ -397,7 +541,25 @@ inletsort_sort(PyObject *module, PyObject *args)
     }
 
     Ctx ctx = {scratch, reverse, 0};
-    sort_range(&ctx, base, 0, n, max_depth(n));
+
+    /* Try the type-specialized radix fast paths first; fall back to the
+     * generic comparison samplesort for mixed/large/NaN inputs. */
+    int fast = try_sort_int64(base, n, reverse);
+    if (fast == 0) {
+        fast = try_sort_float64(base, n, reverse);
+    }
+    if (fast < 0) {
+        for (Py_ssize_t i = 0; i < n; i++) {
+            Py_DECREF(base[i]);
+        }
+        PyMem_Free(base);
+        PyMem_Free(old);
+        PyMem_Free(scratch);
+        return NULL;
+    }
+    if (fast == 0) {
+        sort_range(&ctx, base, 0, n, max_depth(n));
+    }
 
     if (ctx.error) {
         for (Py_ssize_t i = 0; i < n; i++) {
