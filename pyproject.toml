@@ -60,3 +60,14 @@ exclude = ["*.md"]
 python_version = "3.10"
 files = ["src"]
 strict = true
+
+[tool.cibuildwheel]
+# Build for the Python versions this project supports.
+build = "cp310-* cp311-* cp312-*"
+# Skip 32-bit targets; the native fast path assumes a 64-bit build.
+skip = "*-win32 *_i686"
+build-frontend = "build"
+# Install the built wheel and run the test suite against it (not the source
+# tree), which confirms the compiled extension works in the packaged wheel.
+test-requires = "pytest hypothesis"
+test-command = "python -m pytest {project}/tests -o pythonpath= -o addopts="
